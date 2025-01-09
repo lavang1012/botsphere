@@ -21,7 +21,7 @@ booked_appointments = []
 FEEDBACK_LINK = "https://feedback-form.example.com"
 
 # Define owner phone numbers
-OWNER_PHONE_NUMBERS = ["whatsapp:+1234567890"]
+OWNER_PHONE_NUMBERS = ["whatsapp:+918860397260"]
 
 # Initialize APScheduler
 scheduler = BackgroundScheduler()
@@ -81,6 +81,10 @@ def send_owner_notification(date, time, user_phone):
         logging.info(f"Sending booking notification to owner {owner}.")
         # Simulate sending notification to owner
         print(f"Notification sent to {owner}: New booking - Date: {date}, Time: {time}, User: {user_phone}.")
+
+@app.route("/", methods=["GET"])
+def home():
+    return "WhatsApp Bot is running!", 200
 
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp_reply():
