@@ -125,7 +125,7 @@ def whatsapp_reply():
                     # End the appointment
                     booked_appointments.remove(existing_appointment)
                     send_feedback_link(phone_number)
-                    response_text = "Your appointment has been marked as completed. Please provide your feedback using the link sent to you."
+                    response_text = f"Your appointment on {existing_appointment['date']} at {existing_appointment['time']} has been marked as completed. Please provide your feedback using this link: {FEEDBACK_LINK}"
                     msg.body(response_text)
                     return str(resp)
                 elif incoming_msg.lower() == "cancel":
