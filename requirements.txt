@@ -2,4 +2,3 @@ Flask
 twilio
 apscheduler
 gunicorn
-SQLAlchemy
