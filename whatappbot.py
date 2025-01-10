@@ -3,6 +3,7 @@ from flask_sqlalchemy import SQLAlchemy
 from twilio.twiml.messaging_response import MessagingResponse
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
+from sqlalchemy import text
 import logging
 import os
 
@@ -48,7 +49,7 @@ scheduler.start()
 @app.route("/", methods=["GET"])
 def home():
     try:
-        result = db.session.execute("SELECT 1").fetchall()
+        result = db.session.execute(text("SELECT 1")).fetchall()
         return "Database connected successfully!", 200
     except Exception as e:
         logging.error(f"Database connection error: {e}")
