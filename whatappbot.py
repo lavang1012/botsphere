@@ -6,12 +6,20 @@ from datetime import datetime, timedelta
 from sqlalchemy import text
 import logging
 import os
+from twilio.rest import Client
 
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
+# Twilio configuration
+ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
+AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_PHONE_NUMBER = "whatsapp:+14155238886"  # Twilio Sandbox Number
+
+client = Client(ACCOUNT_SID, AUTH_TOKEN)
+
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://ud3884iptels6u:p9e8ff5282a8fb1693b5ba1780a9d0a80b1050d281d6ac8c4e925541ec232fdd3@cb5ajfjosdpmil.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d8s96f4s2if0t9'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'postgresql://ud3884iptels6u:p9e8ff5282a8fb1693b5ba1780a9d0a80b1050d281d6ac8c4e925541ec232fdd3@cb5ajfjosdpmil.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d8s96f4s2if0t9')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -35,6 +43,7 @@ with app.app_context():
         logging.info("Database tables created successfully.")
     except Exception as e:
         logging.error(f"Error during database table creation: {e}")
+        raise e
 
 # Feedback link
 FEEDBACK_LINK = "https://feedback-form.example.com"
@@ -90,7 +99,7 @@ def whatsapp_reply():
         if not is_owner:
             # View available slots
             if incoming_msg.strip() == "1":
-                slots = Slot.query.filter_by(is_available=True).all()
+                slots = Slot.query.filter(Slot.date >= datetime.now().strftime("%Y-%m-%d"), Slot.is_available.is_(True)).all()
                 if not slots:
                     response_text = "No slots available."
                 else:
@@ -116,14 +125,17 @@ def whatsapp_reply():
                         response_text = "The selected slot is already booked or unavailable. Please choose another."
                     else:
                         slot.is_available = False
-                        db.session.commit()
                         new_appointment = Appointment(phone_number=phone_number, date=input_date, time=time)
                         db.session.add(new_appointment)
                         db.session.commit()
 
                         # Notify the owner
                         for owner in OWNER_PHONE_NUMBERS:
-                            logging.info(f"New appointment booked: {input_date} at {time} by {phone_number}")
+                            client.messages.create(
+                                from_=TWILIO_PHONE_NUMBER,
+                                to=owner,
+                                body=f"New appointment booked: {input_date} at {time} by {phone_number}"
+                            )
 
                         response_text = f"Your appointment is confirmed for {input_date} at {time}. Thank you!"
 
@@ -147,6 +159,14 @@ def whatsapp_reply():
 
                     db.session.delete(appointment)
                     db.session.commit()
+
+                    # Notify the owner
+                    for owner in OWNER_PHONE_NUMBERS:
+                        client.messages.create(
+                            from_=TWILIO_PHONE_NUMBER,
+                            to=owner,
+                            body=f"Appointment on {appointment.date} at {appointment.time} has been canceled by {phone_number}"
+                        )
 
                     if incoming_msg.lower() == "end":
                         response_text = f"Your appointment on {appointment.date} at {appointment.time} has been marked as completed. Please provide your feedback here: {FEEDBACK_LINK}"
