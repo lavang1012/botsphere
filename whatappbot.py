@@ -105,10 +105,16 @@ def whatsapp_reply():
             # View available slots
             if incoming_msg.strip() == "1":
                 today_date = datetime.now().strftime("%Y-%m-%d")
-                slots = Slot.query.filter(
-                    Slot.date >= today_date, 
-                    Slot.is_available.is_(True)
-                ).order_by(Slot.date, Slot.time).all()
+                try:
+                    slots = Slot.query.filter(
+                        Slot.date >= today_date, 
+                        Slot.is_available.is_(True)
+                    ).order_by(Slot.date, Slot.time).all()
+                    logging.debug(f"Retrieved slots: {slots}")
+                except Exception as e:
+                    logging.error(f"Error querying slots: {e}")
+                    slots = []
+
                 if not slots:
                     response_text = "No slots available."
                 else:
