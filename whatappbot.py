@@ -7,10 +7,10 @@ import logging
 import os
 
 app = Flask(__name__)
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s', flush=True)
 
 # Database configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://ud3884iptels6u:p9e8ff5282a8fb1693b5ba1780a9d0a80b1050d281d6ac8c4e925541ec232fdd3@cb5ajfjosdpmil.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d8s96f4s2if0t9'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgres://ud3884iptels6u:p9e8ff5282a8fb1693b5ba1780a9d0a80b1050d281d6ac8c4e925541ec232fdd3@cb5ajfjosdpmil.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d8s96f4s2if0t9'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -29,7 +29,11 @@ class Slot(db.Model):
     is_available = db.Column(db.Boolean, default=True)
 
 with app.app_context():
-    db.create_all()
+    try:
+        db.create_all()
+        logging.info("Database tables created successfully.")
+    except Exception as e:
+        logging.error(f"Error during database table creation: {e}")
 
 # Feedback link
 FEEDBACK_LINK = "https://feedback-form.example.com"
@@ -43,7 +47,12 @@ scheduler.start()
 
 @app.route("/", methods=["GET"])
 def home():
-    return "WhatsApp Bot is running!", 200
+    try:
+        result = db.session.execute("SELECT 1").fetchall()
+        return "Database connected successfully!", 200
+    except Exception as e:
+        logging.error(f"Database connection error: {e}")
+        return f"Database connection error: {e}", 500
 
 @app.route("/whatsapp", methods=["POST"])
 def whatsapp_reply():
@@ -51,6 +60,8 @@ def whatsapp_reply():
         incoming_msg = request.values.get('Body', '').strip()
         phone_number = request.values.get('From', '').strip()
         is_owner = phone_number in OWNER_PHONE_NUMBERS
+
+        logging.debug(f"Incoming message: {incoming_msg}, From: {phone_number}, Is Owner: {is_owner}")
 
         resp = MessagingResponse()
         msg = resp.message()
