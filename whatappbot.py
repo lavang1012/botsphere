@@ -1,4 +1,5 @@
 from flask import Flask, request
+from flask_sqlalchemy import SQLAlchemy
 from twilio.twiml.messaging_response import MessagingResponse
 from apscheduler.schedulers.background import BackgroundScheduler
 from datetime import datetime, timedelta
@@ -8,79 +9,36 @@ import os
 app = Flask(__name__)
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Sample available time slots (uses DD-MM-YYYY format)
-available_slots = {
-    "27-12-2024": ["10:00 AM", "11:00 AM", "2:00 PM", "3:45 PM"],
-    "29-12-2024": ["10:00 AM", "12:00 PM", "4:00 PM"]
-}
+# Database configuration
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://ud3884iptels6u:p9e8ff5282a8fb1693b5ba1780a9d0a80b1050d281d6ac8c4e925541ec232fdd3@cb5ajfjosdpmil.cluster-czrs8kj4isg7.us-east-1.rds.amazonaws.com:5432/d8s96f4s2if0t9'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
-# Store booked appointments
-booked_appointments = []
+# Define the Appointment model
+class Appointment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    phone_number = db.Column(db.String(20), nullable=False)
+    date = db.Column(db.String(20), nullable=False)
+    time = db.Column(db.String(20), nullable=False)
+
+# Define the Slot model
+class Slot(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    date = db.Column(db.String(20), nullable=False)
+    time = db.Column(db.String(20), nullable=False)
+    is_available = db.Column(db.Boolean, default=True)
+
+db.create_all()
 
 # Feedback link
 FEEDBACK_LINK = "https://feedback-form.example.com"
 
-# Define owner phone numbers
+# Owner phone numbers
 OWNER_PHONE_NUMBERS = ["whatsapp:+918860397260"]
 
 # Initialize APScheduler
 scheduler = BackgroundScheduler()
 scheduler.start()
-
-def format_available_slots():
-    """Format available slots for display."""
-    response = "Available slots:\n"
-    for date, times in available_slots.items():
-        response += f"{date}:\n"
-        for time in times:
-            response += f"  - {time}\n"
-    return response if response.strip() != "Available slots:" else "No slots available."
-
-def format_booked_appointments():
-    """Format booked appointments for display."""
-    if not booked_appointments:
-        return "No appointments booked yet."
-    response = f"Total Appointments: {len(booked_appointments)}\nBooked Appointments:\n"
-    for appointment in booked_appointments:
-        response += f"Date: {appointment['date']}, Time: {appointment['time']}, Phone: {appointment['phone_number']}\n"
-    return response
-
-def parse_date(input_date):
-    """
-    Parse the user's input date into DD-MM-YYYY format.
-    Accepts various formats like "28-12-2024", "28/12/2024", "28 Dec 2024".
-    """
-    try:
-        normalized_date = datetime.strptime(input_date.strip(), "%d-%m-%Y")
-    except ValueError:
-        try:
-            normalized_date = datetime.strptime(input_date.strip(), "%d/%m/%Y")
-        except ValueError:
-            try:
-                normalized_date = datetime.strptime(input_date.strip(), "%d %b %Y")
-            except ValueError:
-                try:
-                    normalized_date = datetime.strptime(input_date.strip(), "%d %B %Y")
-                except ValueError:
-                    return None
-    return normalized_date.strftime("%d-%m-%Y")
-
-def send_reminder(phone_number, date, time):
-    """Send a reminder message."""
-    logging.info(f"Sending reminder to {phone_number} for {date} at {time}.")
-    print(f"Reminder sent to {phone_number} for {date} at {time}.")
-
-def send_feedback_link(phone_number):
-    """Send a feedback link message."""
-    logging.info(f"Sending feedback link to {phone_number}.")
-    print(f"Feedback link sent to {phone_number}: {FEEDBACK_LINK}")
-
-def send_owner_notification(date, time, user_phone):
-    """Notify the owner about a new booking."""
-    for owner in OWNER_PHONE_NUMBERS:
-        logging.info(f"Sending booking notification to owner {owner}.")
-        # Simulate sending notification to owner
-        print(f"Notification sent to {owner}: New booking - Date: {date}, Time: {time}, User: {user_phone}.")
 
 @app.route("/", methods=["GET"])
 def home():
@@ -91,7 +49,7 @@ def whatsapp_reply():
     try:
         incoming_msg = request.values.get('Body', '').strip()
         phone_number = request.values.get('From', '').strip()
-        is_owner = phone_number in OWNER_PHONE_NUMBERS  # Check if the user is an owner
+        is_owner = phone_number in OWNER_PHONE_NUMBERS
 
         resp = MessagingResponse()
         msg = resp.message()
@@ -114,37 +72,24 @@ def whatsapp_reply():
                     "Example: Book 28-12-2024 10:00 AM"
                 )
             msg.body(response_text)
-            return str(resp)  # Ensure no additional responses are sent
+            return str(resp)
 
-        # Handle customer actions
         if not is_owner:
-            # Check if the user already has a booked appointment
-            existing_appointment = next((appt for appt in booked_appointments if appt["phone_number"] == phone_number), None)
-            if existing_appointment:
-                if incoming_msg.lower() == "end":
-                    # End the appointment
-                    booked_appointments.remove(existing_appointment)
-                    send_feedback_link(phone_number)
-                    response_text = f"Your appointment on {existing_appointment['date']} at {existing_appointment['time']} has been marked as completed. Please provide your feedback using this link: {FEEDBACK_LINK}"
-                    msg.body(response_text)
-                    return str(resp)
-                elif incoming_msg.lower() == "cancel":
-                    # Cancel the appointment
-                    booked_appointments.remove(existing_appointment)
-                    response_text = f"Your appointment on {existing_appointment['date']} at {existing_appointment['time']} has been canceled."
-                    msg.body(response_text)
-                    return str(resp)
-                else:
-                    response_text = f"You already have an appointment booked on {existing_appointment['date']} at {existing_appointment['time']}. Please complete or cancel it before booking another."
-                    msg.body(response_text)
-                    return str(resp)
-
+            # View available slots
             if incoming_msg.strip() == "1":
-                response_text = f"Here are the available slots:\n\n{format_available_slots()}"
+                slots = Slot.query.filter_by(is_available=True).all()
+                if not slots:
+                    response_text = "No slots available."
+                else:
+                    response_text = "Available slots:\n" + "\n".join(
+                        f"{slot.date} at {slot.time}" for slot in slots
+                    )
                 msg.body(response_text)
+                return str(resp)
+
+            # Book appointment
             elif incoming_msg.lower().startswith("book"):
                 try:
-                    # Parse date and time
                     parts = incoming_msg.split(maxsplit=2)
                     if len(parts) < 3:
                         raise ValueError("Incomplete booking details.")
@@ -152,78 +97,87 @@ def whatsapp_reply():
                     input_date = parts[1].strip()
                     time = parts[2].strip()
 
-                    # Normalize date and time
-                    normalized_date = parse_date(input_date)
-                    if not normalized_date:
-                        response_text = "Invalid date format. Please use DD-MM-YYYY."
-                        msg.body(response_text)
-                        return str(resp)
-
-                    time = time.upper().strip()
-
-                    # Validate and confirm appointment
-                    if normalized_date in available_slots and time in map(str.upper, available_slots[normalized_date]):
-                        available_slots[normalized_date] = [t for t in available_slots[normalized_date] if t.upper().strip() != time]
-                        booked_appointments.append({"date": normalized_date, "time": time, "phone_number": phone_number})
-
-                        response_text = f"Your appointment is confirmed for {normalized_date} at {time}. Thank you!"
-                        msg.body(response_text)
+                    # Check if slot is available
+                    slot = Slot.query.filter_by(date=input_date, time=time, is_available=True).first()
+                    if not slot:
+                        response_text = "The selected slot is already booked or unavailable. Please choose another."
+                    else:
+                        slot.is_available = False
+                        db.session.commit()
+                        new_appointment = Appointment(phone_number=phone_number, date=input_date, time=time)
+                        db.session.add(new_appointment)
+                        db.session.commit()
 
                         # Notify the owner
-                        send_owner_notification(normalized_date, time, phone_number)
+                        for owner in OWNER_PHONE_NUMBERS:
+                            logging.info(f"New appointment booked: {input_date} at {time} by {phone_number}")
 
-                        # Schedule reminder and feedback link
-                        appointment_datetime = datetime.strptime(f"{normalized_date} {time}", "%d-%m-%Y %I:%M %p")
-                        reminder_time = appointment_datetime - timedelta(minutes=1)
-                        feedback_time = appointment_datetime + timedelta(hours=1)
+                        response_text = f"Your appointment is confirmed for {input_date} at {time}. Thank you!"
 
-                        scheduler.add_job(send_reminder, 'date', run_date=reminder_time, args=[phone_number, normalized_date, time])
-                        scheduler.add_job(send_feedback_link, 'date', run_date=feedback_time, args=[phone_number])
-                    elif normalized_date not in available_slots:
-                        response_text = f"No slots available for {normalized_date}. Please choose another date."
-                        msg.body(response_text)
-                    else:
-                        response_text = f"The selected time {time} is not available on {normalized_date}. Please choose from: {', '.join(available_slots.get(normalized_date, []))}."
-                        msg.body(response_text)
-                except (IndexError, ValueError) as e:
-                    logging.error(f"Error parsing input: {e}")
-                    response_text = "Invalid format. Please use the format: Book [date] [time]. Example: Book 28-12-2024 10:00 AM"
                     msg.body(response_text)
+                except Exception as e:
+                    logging.error(f"Error booking appointment: {e}")
+                    response_text = "Invalid format. Please use the format: Book [date] [time]."
+                    msg.body(response_text)
+                return str(resp)
 
-        # Handle owner actions
+            # End or cancel appointment
+            elif incoming_msg.lower() in ["end", "cancel"]:
+                appointment = Appointment.query.filter_by(phone_number=phone_number).first()
+                if not appointment:
+                    response_text = "You have no active appointments to end or cancel."
+                else:
+                    # Mark slot as available again
+                    slot = Slot.query.filter_by(date=appointment.date, time=appointment.time).first()
+                    if slot:
+                        slot.is_available = True
+
+                    db.session.delete(appointment)
+                    db.session.commit()
+
+                    if incoming_msg.lower() == "end":
+                        response_text = f"Your appointment on {appointment.date} at {appointment.time} has been marked as completed. Please provide your feedback here: {FEEDBACK_LINK}"
+                    else:
+                        response_text = f"Your appointment on {appointment.date} at {appointment.time} has been canceled."
+
+                msg.body(response_text)
+                return str(resp)
+
+        # Admin actions
         if is_owner:
             if incoming_msg.strip() == "1":
-                response_text = format_booked_appointments()
+                appointments = Appointment.query.all()
+                if not appointments:
+                    response_text = "No appointments booked yet."
+                else:
+                    response_text = "Booked Appointments:\n" + "\n".join(
+                        f"{appt.date} at {appt.time} - {appt.phone_number}" for appt in appointments
+                    )
                 msg.body(response_text)
             elif incoming_msg.lower().startswith("update"):
                 try:
-                    # Parse date and new slots
                     parts = incoming_msg.split(maxsplit=2)
                     if len(parts) < 3:
                         raise ValueError("Incomplete update details.")
 
                     input_date = parts[1].strip()
-                    slots = parts[2].split(',')
+                    times = parts[2].split(',')
 
-                    normalized_date = parse_date(input_date)
-                    if not normalized_date:
-                        response_text = "Invalid date format. Please use DD-MM-YYYY."
-                        msg.body(response_text)
-                        return str(resp)
+                    for time in times:
+                        existing_slot = Slot.query.filter_by(date=input_date, time=time.strip()).first()
+                        if existing_slot:
+                            existing_slot.is_available = True
+                        else:
+                            new_slot = Slot(date=input_date, time=time.strip(), is_available=True)
+                            db.session.add(new_slot)
 
-                    available_slots[normalized_date] = [slot.strip() for slot in slots]
-                    response_text = f"Slots updated for {normalized_date}: {', '.join(available_slots[normalized_date])}"
+                    db.session.commit()
+                    response_text = f"Slots updated for {input_date}: {', '.join(times)}"
                     msg.body(response_text)
-                except ValueError as e:
+                except Exception as e:
                     logging.error(f"Error updating slots: {e}")
-                    response_text = "Invalid format. Please use the format: Update [date] [slot1, slot2, ...]. Example: Update 28-12-2024 10:00 AM, 11:00 AM"
+                    response_text = "Invalid format. Please use the format: Update [date] [time1, time2, ...]."
                     msg.body(response_text)
-            elif incoming_msg.strip() == "3":
-                response_text = f"Remaining slots:\n\n{format_available_slots()}"
-                msg.body(response_text)
-            elif incoming_msg.strip() == "4":
-                response_text = format_booked_appointments()
-                msg.body(response_text)
 
         return str(resp)
 
