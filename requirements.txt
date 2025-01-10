@@ -1,5 +1,6 @@
 Flask
-twilio
-apscheduler
-gunicorn
 flask_sqlalchemy
+Twilio
+APScheduler
+gunicorn
+psycopg2-binary
