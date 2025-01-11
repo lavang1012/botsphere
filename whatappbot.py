@@ -104,7 +104,7 @@ def whatsapp_reply():
         if not is_owner:
             # View available slots
             if incoming_msg.strip() == "1":
-                today_date = datetime.now().strftime("%Y-%m-%d")
+                today_date = datetime.now().strftime("%d-%m-%Y")  # Adjusted to match DB format
                 try:
                     slots = Slot.query.filter(
                         Slot.date >= today_date, 
@@ -230,7 +230,7 @@ def whatsapp_reply():
                 return str(resp)
 
             elif incoming_msg.strip() == "3":
-                today_date = datetime.now().strftime("%Y-%m-%d")
+                today_date = datetime.now().strftime("%d-%m-%Y")  # Adjusted to match DB format
                 slots = Slot.query.filter(Slot.date >= today_date, Slot.is_available == True).order_by(Slot.date, Slot.time).all()
                 if not slots:
                     response_text = "No remaining slots available."
