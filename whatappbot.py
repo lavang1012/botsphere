@@ -108,9 +108,9 @@ def whatsapp_reply():
                 try:
                     slots = Slot.query.filter(
                         Slot.date >= today_date, 
-                        Slot.is_available.is_(True)
+                        Slot.is_available == True
                     ).order_by(Slot.date, Slot.time).all()
-                    logging.debug(f"Retrieved slots: {slots}")
+                    logging.debug(f"Query Result for Slots: {slots}")
                 except Exception as e:
                     logging.error(f"Error querying slots: {e}")
                     slots = []
@@ -220,21 +220,46 @@ def whatsapp_reply():
                             db.session.add(new_slot)
 
                     db.session.commit()
+
                     response_text = f"Slots updated for {input_date}: {', '.join(times)}"
-                    msg.body(response_text)
                 except Exception as e:
                     logging.error(f"Error updating slots: {e}")
-                    response_text = "Invalid format. Please use the format: Update [date] [time1, time2, ...]."
-                    msg.body(response_text)
+                    response_text = "Error updating slots. Please use the format: Update [date] [time1, time2, ...]"
+
+                msg.body(response_text)
+                return str(resp)
+
+            elif incoming_msg.strip() == "3":
+                today_date = datetime.now().strftime("%Y-%m-%d")
+                slots = Slot.query.filter(Slot.date >= today_date, Slot.is_available == True).order_by(Slot.date, Slot.time).all()
+                if not slots:
+                    response_text = "No remaining slots available."
+                else:
+                    response_text = "Remaining Slots:\n" + "\n".join(
+                        f"{slot.date} at {slot.time}" for slot in slots
+                    )
+                msg.body(response_text)
+            elif incoming_msg.strip() == "4":
+                appointments = Appointment.query.all()
+                if not appointments:
+                    response_text = "No appointments booked yet."
+                else:
+                    response_text = (
+                        "Report:\n" +
+                        "\n".join(
+                            f"{appt.date} at {appt.time} - {appt.phone_number}" for appt in appointments
+                        )
+                    )
+                msg.body(response_text)
 
         return str(resp)
 
     except Exception as e:
-        logging.error(f"An error occurred: {e}")
+        logging.error(f"Error handling the incoming message: {e}")
         resp = MessagingResponse()
-        resp.message("An error occurred. Please try again later.")
+        msg = resp.message()
+        msg.body("An error occurred. Please try again later.")
         return str(resp)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host="0.0.0.0", port=port)
+    app.run(debug=True)
