@@ -127,6 +127,12 @@ def whatsapp_reply():
             # Book appointment
             elif incoming_msg.lower().startswith("book"):
                 try:
+                    # Check for existing appointment
+                    existing_appointment = Appointment.query.filter_by(phone_number=phone_number).first()
+                    if existing_appointment:
+                        msg.body(f"You already have an appointment booked for {existing_appointment.date} at {existing_appointment.time}.")
+                        return str(resp)
+
                     # Split and validate the input
                     parts = incoming_msg.split(maxsplit=2)
                     if len(parts) < 3:
@@ -194,10 +200,11 @@ def whatsapp_reply():
 
                     # Notify the owner
                     for owner in OWNER_PHONE_NUMBERS:
+                        status_message = "completed" if incoming_msg.lower() == "end" else "canceled"
                         client.messages.create(
                             from_=TWILIO_PHONE_NUMBER,
                             to=owner,
-                            body=f"Appointment on {appointment.date} at {appointment.time} has been canceled by {phone_number}"
+                            body=f"Appointment on {appointment.date} at {appointment.time} has been {status_message} by {phone_number}"
                         )
 
                     if incoming_msg.lower() == "end":
