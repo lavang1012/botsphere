@@ -31,7 +31,7 @@ db = SQLAlchemy(app)
 # Define the Appointment model
 class Appointment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    phone_number = db.Column(db.String(30), nullable=False)
+    phone_number = db.Column(db.String(50), nullable=False)
     date = db.Column(db.String(20), nullable=False)
     time = db.Column(db.String(20), nullable=False)
 
