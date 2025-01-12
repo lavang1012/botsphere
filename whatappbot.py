@@ -31,7 +31,7 @@ db = SQLAlchemy(app)
 # Define the Appointment model
 class Appointment(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    phone_number = db.Column(db.String(30), nullable=False)
+    phone_number = db.Column(db.String(20), nullable=False)
     date = db.Column(db.String(20), nullable=False)
     time = db.Column(db.String(20), nullable=False)
 
@@ -127,38 +127,55 @@ def whatsapp_reply():
             # Book appointment
             elif incoming_msg.lower().startswith("book"):
                 try:
+                    # Split and validate the input
                     parts = incoming_msg.split(maxsplit=2)
                     if len(parts) < 3:
                         raise ValueError("Incomplete booking details.")
 
                     input_date = parts[1].strip()
-                    time = parts[2].strip()
+                    input_time = parts[2].strip()
 
-                    # Check if slot is available
-                    slot = Slot.query.filter_by(date=input_date, time=time, is_available=True).first()
+                    # Validate the date format
+                    try:
+                        datetime.strptime(input_date, "%d-%m-%Y")
+                    except ValueError:
+                        raise ValueError("Invalid date format. Use DD-MM-YYYY.")
+
+                    # Validate the time format
+                    try:
+                        datetime.strptime(input_time, "%I:%M %p")
+                    except ValueError:
+                        raise ValueError("Invalid time format. Use hh:mm AM/PM.")
+
+                    # Check if the slot exists and is available
+                    slot = Slot.query.filter_by(date=input_date, time=input_time, is_available=True).first()
                     if not slot:
                         response_text = "The selected slot is already booked or unavailable. Please choose another."
                     else:
+                        # Update slot and create appointment
                         slot.is_available = False
-                        new_appointment = Appointment(phone_number=phone_number, date=input_date, time=time)
+                        new_appointment = Appointment(phone_number=phone_number, date=input_date, time=input_time)
                         db.session.add(new_appointment)
                         db.session.commit()
 
-                        # Notify the owner
+                        # Notify owner
                         for owner in OWNER_PHONE_NUMBERS:
                             client.messages.create(
                                 from_=TWILIO_PHONE_NUMBER,
                                 to=owner,
-                                body=f"New appointment booked: {input_date} at {time} by {phone_number}"
+                                body=f"New appointment booked: {input_date} at {input_time} by {phone_number}"
                             )
 
-                        response_text = f"Your appointment is confirmed for {input_date} at {time}. Thank you!"
+                        response_text = f"Your appointment is confirmed for {input_date} at {input_time}. Thank you!"
 
                     msg.body(response_text)
+
+                except ValueError as ve:
+                    logging.error(f"Validation error: {ve}")
+                    msg.body(str(ve))
                 except Exception as e:
                     logging.error(f"Error booking appointment: {e}")
-                    response_text = "Invalid format. Please use the format: Book [date] [time]."
-                    msg.body(response_text)
+                    msg.body("An error occurred. Please try again later.")
                 return str(resp)
 
             # End or cancel appointment
