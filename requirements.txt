@@ -4,3 +4,4 @@ Twilio
 APScheduler
 gunicorn
 psycopg2-binary
+pip install flask-cors
